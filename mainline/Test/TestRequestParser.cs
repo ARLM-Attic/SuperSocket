@@ -7,7 +7,7 @@ using SuperSocket.SocketBase.Command;
 
 namespace SuperSocket.Test
 {
-    public class TestCommandParser : IRequestInfoParser<StringRequestInfo>
+    public class TestRequestParser : IRequestInfoParser<StringRequestInfo>
     {
         #region ICommandParser Members
 

@@ -6,7 +6,7 @@ using SuperSocket.Common;
 using SuperSocket.SocketBase;
 using SuperSocket.SocketBase.Protocol;
 
-namespace SuperSocket.Facility.Protocol
+namespace SuperSocket.SocketBase.Protocol
 {
     /// <summary>
     /// FixHeaderRequestFilter,

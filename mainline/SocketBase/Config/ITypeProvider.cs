@@ -1,23 +1,22 @@
-using System;
-using System.Configuration;
-using System.Collections.Specialized;
+﻿using System;
+using System.Collections.Generic;
+using System.Text;
 
 namespace SuperSocket.SocketBase.Config
 {
     /// <summary>
-    /// Connection filter configuraion interface
+    /// TypeProvider's interface
     /// </summary>
-    public interface IConnectionFilterConfig
+    public interface ITypeProvider
     {
         /// <summary>
-        /// Gets the filter name.
+        /// Gets the name.
         /// </summary>
         string Name { get; }
 
         /// <summary>
-        /// Gets the filter's type.
+        /// Gets the type.
         /// </summary>
         string Type { get; }
     }
 }
-
