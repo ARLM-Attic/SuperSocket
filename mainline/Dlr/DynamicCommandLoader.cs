@@ -3,284 +3,99 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
-using System.Threading;
 using Microsoft.Scripting.Hosting;
-using SuperSocket.Common;
-using SuperSocket.Common.Logging;
 using SuperSocket.SocketBase;
-using SuperSocket.SocketBase.Command;
-using SuperSocket.SocketBase.Protocol;
+using SuperSocket.SocketBase.Config;
 
 namespace SuperSocket.Dlr
 {
     /// <summary>
-    /// Which is used for loading dynamic script file
+    /// DynamicCommandLoader
     /// </summary>
-    public class DynamicCommandLoader : ICommandLoader
+    public class DynamicCommandLoader : DynamicCommandLoaderBase
     {
-        private static ScriptRuntime m_ScriptRuntime;
-
-        private static HashSet<string> m_CommandExtensions;
-
-        private static Timer m_CommandDirCheckingTimer;
-
-        private static readonly int m_CommandDirCheckingInterval = 1000 * 60 * 5;// 5 minutes
-
-        static DynamicCommandLoader()
-        {
-            m_ScriptRuntime = ScriptRuntime.CreateFromConfiguration();
-
-            List<string> fileExtensions = new List<string>();
-
-            foreach (var fxts in m_ScriptRuntime.Setup.LanguageSetups.Select(s => s.FileExtensions))
-                fileExtensions.AddRange(fxts);
-
-            m_CommandExtensions = new HashSet<string>(fileExtensions, StringComparer.OrdinalIgnoreCase);
-
-            m_ServerCommandStateLib = new Dictionary<string, ServerCommandState>(StringComparer.OrdinalIgnoreCase);
-            m_CommandDirCheckingTimer = new Timer(OnCommandDirCheckingTimerCallback, null, m_CommandDirCheckingInterval, m_CommandDirCheckingInterval);
-        }
-
-        static IEnumerable<string> GetCommandFiles(string path, SearchOption option)
-        {
-            return Directory.GetFiles(path, "*.*", option).Where(f => m_CommandExtensions.Contains(Path.GetExtension(f)));
-        }
-
-        private static void OnCommandDirCheckingTimerCallback(object state)
-        {
-            m_CommandDirCheckingTimer.Change(Timeout.Infinite, Timeout.Infinite);
-
-            try
-            {
-                var commandDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Command");
-                var commonCommands = GetCommandFiles(commandDir, SearchOption.TopDirectoryOnly);
-
-                foreach (var name in m_ServerCommandStateLib.Keys)
-                {
-                    var serverState = m_ServerCommandStateLib[name];
-
-                    var commandSourceDict = serverState.Commands.ToDictionary(c => c.FilePath,
-                        c => new CommandFileEntity { Command = c },
-                        StringComparer.OrdinalIgnoreCase);
-
-                    var serverCommands = commonCommands.ToList();
-                    
-                    var serverCommandDir = Path.Combine(commandDir, name);
-
-                    if (Directory.Exists(serverCommandDir))
-                    {
-                        serverCommands.AddRange(GetCommandFiles(serverCommandDir, SearchOption.TopDirectoryOnly));
-                    }
-
-                    List<CommandUpdateInfo<CommandFileInfo>> updatedCommands = new List<CommandUpdateInfo<CommandFileInfo>>();
-
-                    foreach (var c in serverCommands)
-                    {
-                        var lastUpdatedTime = File.GetLastWriteTime(c);
-
-                        CommandFileEntity commandEntity;
-
-                        if (commandSourceDict.TryGetValue(c, out commandEntity))
-                        {
-                            commandEntity.Processed = true;
-
-                            if (commandEntity.Command.LastUpdatedTime != lastUpdatedTime)
-                            {
-                                //update command's last updated time in dictionary
-                                commandEntity.Command.LastUpdatedTime = lastUpdatedTime;
-
-                                updatedCommands.Add(new CommandUpdateInfo<CommandFileInfo>
-                                    {
-                                        UpdateAction = CommandUpdateAction.Update,
-                                        Command = new CommandFileInfo
-                                            {
-                                                FilePath = c,
-                                                LastUpdatedTime = lastUpdatedTime
-                                            }
-                                    });
-                            }
-                        }
-                        else
-                        {
-                            commandSourceDict.Add(c, new CommandFileEntity
-                                {
-                                    Command = new CommandFileInfo
-                                        {
-                                            FilePath = c,
-                                            LastUpdatedTime = lastUpdatedTime
-                                        },
-                                    Processed = true
-                                });
-
-                            updatedCommands.Add(new CommandUpdateInfo<CommandFileInfo>
-                                {
-                                    UpdateAction = CommandUpdateAction.Add,
-                                    Command = new CommandFileInfo
-                                    {
-                                        FilePath = c,
-                                        LastUpdatedTime = lastUpdatedTime
-                                    }
-                                });
-                        }
-                    }
-
-                    foreach (var cmd in commandSourceDict.Values.Where(e => !e.Processed))
-                    {
-                        updatedCommands.Add(new CommandUpdateInfo<CommandFileInfo>
-                            {
-                                UpdateAction = CommandUpdateAction.Remove,
-                                Command = new CommandFileInfo
-                                {
-                                    FilePath = cmd.Command.FilePath,
-                                    LastUpdatedTime = cmd.Command.LastUpdatedTime
-                                }
-                            });
-                    }
-
-                    if (updatedCommands.Count > 0)
-                    {
-                        serverState.Commands = commandSourceDict.Values.Where(e => e.Processed).Select(e => e.Command).ToList();
-                        serverState.CommandUpdater(updatedCommands);
-                    }
-                }
-            }
-            catch (Exception e)
-            {
-                var globalLog = LogFactoryProvider.GlobalLog;
-
-                if (globalLog.IsErrorEnabled)
-                    globalLog.Error(e);
-            }
-            finally
-            {
-                m_CommandDirCheckingTimer.Change(m_CommandDirCheckingInterval, m_CommandDirCheckingInterval);
-            }
-        }
-
-        class CommandFileEntity
-        {
-            public CommandFileInfo Command { get; set; }
-            public bool Processed { get; set; }
-        }
-
-        class CommandFileInfo
-        {
-            public string FilePath { get; set; }
-            public DateTime LastUpdatedTime { get; set; }
-        }
-
-        class ServerCommandState
-        {
-            public List<CommandFileInfo> Commands { get; set; }
-            public Action<IEnumerable<CommandUpdateInfo<CommandFileInfo>>> CommandUpdater { get; set; }
-        }
-
-        private static Dictionary<string, ServerCommandState> m_ServerCommandStateLib;
+        private HashSet<string> m_ScriptFileExtensions;
 
         /// <summary>
-        /// Loads the commands.
+        /// Initializes a new instance of the <see cref="DynamicCommandLoader"/> class.
         /// </summary>
-        /// <typeparam name="TAppSession">The type of the app session.</typeparam>
-        /// <typeparam name="TRequestInfo">The type of the request info.</typeparam>
-        /// <param name="appServer">The app server.</param>
-        /// <param name="commandRegister">The command register.</param>
-        /// <param name="commandUpdater">The command updater.</param>
-        /// <returns></returns>
-        public bool LoadCommands<TAppSession, TRequestInfo>(IAppServer appServer, Func<ICommand<TAppSession, TRequestInfo>, bool> commandRegister, Action<IEnumerable<CommandUpdateInfo<ICommand<TAppSession, TRequestInfo>>>> commandUpdater)
-            where TAppSession : IAppSession, IAppSession<TAppSession, TRequestInfo>, new()
-            where TRequestInfo : IRequestInfo
+        public DynamicCommandLoader()
+            : base()
         {
-            if (m_ServerCommandStateLib.ContainsKey(appServer.Name))
-                throw new Exception("This server's commands have been loaded already!");
+            LoadScriptFileExtensions();
+        }
 
-            ServerCommandState serverCommandState = new ServerCommandState
+        /// <summary>
+        /// Initializes a new instance of the <see cref="DynamicCommandLoader"/> class.
+        /// </summary>
+        /// <param name="scriptRuntime">The script runtime.</param>
+        public DynamicCommandLoader(ScriptRuntime scriptRuntime)
+            : base(scriptRuntime)
+        {
+            LoadScriptFileExtensions();
+        }
+
+        private void LoadScriptFileExtensions()
+        {
+            List<string> fileExtensions = new List<string>();
+
+            foreach (var fxts in ScriptRuntime.Setup.LanguageSetups.Select(s => s.FileExtensions))
+                fileExtensions.AddRange(fxts);
+
+            m_ScriptFileExtensions = new HashSet<string>(fileExtensions, StringComparer.OrdinalIgnoreCase);
+        }
+
+        private IEnumerable<string> GetCommandFiles(string path, SearchOption option)
+        {
+            return Directory.GetFiles(path, "*.*", option).Where(f => m_ScriptFileExtensions.Contains(Path.GetExtension(f)));
+        }
+
+        /// <summary>
+        /// Gets the script sources.
+        /// </summary>
+        /// <param name="rootConfig">The root config.</param>
+        /// <param name="appServer">The app server.</param>
+        /// <returns></returns>
+        protected override IEnumerable<IScriptSource> GetScriptSources(IRootConfig rootConfig, IAppServer appServer)
+        {
+            var sources = new List<IScriptSource>();
+
+            string commandDir = string.Empty;
+            string serverCommandDir = string.Empty;
+
+            var commandDirSearchOption = SearchOption.TopDirectoryOnly;
+
+            if (rootConfig.Isolation == IsolationMode.None)
             {
-                CommandUpdater = (o) =>
-                {
-                    commandUpdater(UpdateCommands<TAppSession, TRequestInfo>(appServer, o));
-                },
-                Commands = new List<CommandFileInfo>()
-            };
-
-
-            var commandDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Command");
-            var serverCommandDir = Path.Combine(commandDir, appServer.Name);
-
-            if (!Directory.Exists(commandDir))
-                return true;
+                commandDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Command");
+                serverCommandDir = Path.Combine(commandDir, appServer.Name);
+            }
+            else
+            {
+                commandDirSearchOption = SearchOption.AllDirectories;
+                commandDir = Path.Combine(Directory.GetParent(AppDomain.CurrentDomain.BaseDirectory).Parent.FullName, "Command");
+                serverCommandDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Command");
+            }
 
             List<string> commandFiles = new List<string>();
 
-            commandFiles.AddRange(GetCommandFiles(commandDir, SearchOption.TopDirectoryOnly));
+            if (Directory.Exists(commandDir))
+                commandFiles.AddRange(GetCommandFiles(commandDir, commandDirSearchOption));
 
             if (Directory.Exists(serverCommandDir))
-            {
-                commandFiles.AddRange(GetCommandFiles(serverCommandDir, SearchOption.TopDirectoryOnly));
-            }
+                commandFiles.AddRange(GetCommandFiles(serverCommandDir, SearchOption.AllDirectories));
 
             if (!commandFiles.Any())
-                return true;
+            {
+                return sources;
+            }
 
             foreach (var file in commandFiles)
             {
-                DynamicCommand<TAppSession, TRequestInfo> command;
-
-                try
-                {
-                    var lastUpdatedTime = File.GetLastWriteTime(file);
-                    command = new DynamicCommand<TAppSession, TRequestInfo>(m_ScriptRuntime, file, lastUpdatedTime);
-                    serverCommandState.Commands.Add(new CommandFileInfo
-                        {
-                            FilePath = file,
-                            LastUpdatedTime = lastUpdatedTime
-                        });
-
-                    if (!commandRegister(command))
-                        return false;
-                }
-                catch (Exception e)
-                {
-                    throw new Exception("Failed to load command file: " + file + "!", e);
-                }
+                sources.Add(new FileScriptSource(file));
             }
 
-            m_ServerCommandStateLib.Add(appServer.Name, serverCommandState);
-
-            return true;
-        }
-
-        private IEnumerable<CommandUpdateInfo<ICommand<TAppSession, TRequestInfo>>> UpdateCommands<TAppSession, TRequestInfo>(IAppServer appServer, IEnumerable<CommandUpdateInfo<CommandFileInfo>> updatedCommands)
-            where TAppSession : IAppSession, IAppSession<TAppSession, TRequestInfo>, new()
-            where TRequestInfo : IRequestInfo
-        {
-            return updatedCommands.Select(c =>
-            {
-                if (c.UpdateAction == CommandUpdateAction.Remove)
-                {
-                    return new CommandUpdateInfo<ICommand<TAppSession, TRequestInfo>>
-                    {
-                        Command = new MockupCommand<TAppSession, TRequestInfo>(Path.GetFileNameWithoutExtension(c.Command.FilePath)),
-                        UpdateAction = c.UpdateAction
-                    };
-                }
-
-                try
-                {
-                    var command = new DynamicCommand<TAppSession, TRequestInfo>(m_ScriptRuntime, c.Command.FilePath, c.Command.LastUpdatedTime);
-
-                    return new CommandUpdateInfo<ICommand<TAppSession, TRequestInfo>>
-                    {
-                        Command = command,
-                        UpdateAction = c.UpdateAction
-                    };
-                }
-                catch (Exception e)
-                {
-                    if (appServer.Logger.IsErrorEnabled)
-                        appServer.Logger.Error("Failed to load command file: " + c.Command.FilePath + "!", e);
-                    return null;
-                }
-            });
+            return sources;
         }
     }
 }

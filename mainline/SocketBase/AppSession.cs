@@ -6,7 +6,7 @@ using System.Net;
 using System.Security.Authentication;
 using System.Text;
 using SuperSocket.Common;
-using SuperSocket.Common.Logging;
+using SuperSocket.SocketBase.Logging;
 using SuperSocket.SocketBase.Command;
 using SuperSocket.SocketBase.Config;
 using SuperSocket.SocketBase.Protocol;
@@ -292,8 +292,7 @@ namespace SuperSocket.SocketBase
         public virtual void SendResponse(string message)
         {
             var data = this.Charset.GetBytes(message);
-            m_SendingQueue.Enqueue(new ArraySegment<byte>(data, 0, data.Length));
-            SocketSession.StartSend();
+            SendResponse(data, 0, data.Length);
         }
 
         /// <summary>
@@ -304,8 +303,7 @@ namespace SuperSocket.SocketBase
         /// <param name="length">The length.</param>
         public virtual void SendResponse(byte[] data, int offset, int length)
         {
-            m_SendingQueue.Enqueue(new ArraySegment<byte>(data, offset, length));
-            SocketSession.StartSend();
+            SendResponse(new ArraySegment<byte>(data, offset, length));
         }
 
         /// <summary>
@@ -316,6 +314,7 @@ namespace SuperSocket.SocketBase
         {
             m_SendingQueue.Enqueue(segment);
             SocketSession.StartSend();
+            LastActiveTime = DateTime.Now;
         }
 
         /// <summary>

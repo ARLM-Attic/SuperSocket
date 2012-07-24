@@ -15,6 +15,7 @@ namespace SuperSocket.SocketEngine.Configuration
     /// <summary>
     /// Server configuration
     /// </summary>
+    [Serializable]
     public class Server : ConfigurationElementBase, IServerConfig
     {
         /// <summary>
@@ -32,10 +33,10 @@ namespace SuperSocket.SocketEngine.Configuration
         /// <summary>
         /// Gets the protocol.
         /// </summary>
-        [ConfigurationProperty("protocol", IsRequired = false)]
-        public string Protocol
+        [ConfigurationProperty("requestFilter", IsRequired = false)]
+        public string RequestFilter
         {
-            get { return this["protocol"] as string; }
+            get { return this["requestFilter"] as string; }
         }
 
         /// <summary>
@@ -50,7 +51,7 @@ namespace SuperSocket.SocketEngine.Configuration
         /// <summary>
         /// Gets the port.
         /// </summary>
-        [ConfigurationProperty("port", IsRequired = true)]
+        [ConfigurationProperty("port", IsRequired = false)]
         public int Port
         {
             get { return (int)this["port"]; }
@@ -250,12 +251,24 @@ namespace SuperSocket.SocketEngine.Configuration
         /// <value>
         /// The connection filters's name list, seperated by comma
         /// </value>
-        [ConfigurationProperty("connectionFilters", IsRequired = false)]
-        public string ConnectionFilters
+        [ConfigurationProperty("connectionFilter", IsRequired = false)]
+        public string ConnectionFilter
         {
             get
             {
-                return (string)this["connectionFilters"];
+                return (string)this["connectionFilter"];
+            }
+        }
+
+        /// <summary>
+        /// Gets the command loader, multiple values should be separated by comma.
+        /// </summary>
+        [ConfigurationProperty("commandLoader", IsRequired = false)]
+        public string CommandLoader
+        {
+            get
+            {
+                return (string)this["commandLoader"];
             }
         }
 
@@ -284,21 +297,6 @@ namespace SuperSocket.SocketEngine.Configuration
         }
 
         /// <summary>
-        /// Gets a value indicating whether [enable dynamic command](support commands written in IronPython).
-        /// </summary>
-        /// <value>
-        /// 	<c>true</c> if [dynamic command is enabled]; otherwise, <c>false</c>.
-        /// </value>
-        [ConfigurationProperty("enableDynamicCommand", IsRequired = false, DefaultValue = false)]
-        public bool EnableDynamicCommand
-        {
-            get
-            {
-                return (bool)this["enableDynamicCommand"];
-            }
-        }
-
-        /// <summary>
         /// Gets the backlog size of socket listening.
         /// </summary>
         [ConfigurationProperty("listenBacklog", IsRequired = false, DefaultValue = 100)]
@@ -319,6 +317,18 @@ namespace SuperSocket.SocketEngine.Configuration
             get
             {
                 return (int)this["startupOrder"];
+            }
+        }
+
+        /// <summary>
+        /// Gets the logfactory name of the server instance.
+        /// </summary>
+        [ConfigurationProperty("logFactory", IsRequired = false, DefaultValue = "")]
+        public string LogFactory
+        {
+            get
+            {
+                return (string)this["logFactory"];
             }
         }
 
@@ -354,23 +364,7 @@ namespace SuperSocket.SocketEngine.Configuration
         public TConfig GetChildConfig<TConfig>(string childConfigName)
             where TConfig : ConfigurationElement, new()
         {
-            var childConfig = this.OptionElements.GetValue(childConfigName, string.Empty);
-
-            if (string.IsNullOrEmpty(childConfig))
-                return default(TConfig);
-
-            var checkConfig = childConfig.Replace(Environment.NewLine, string.Empty).Trim();
-
-            if (string.IsNullOrEmpty(checkConfig))
-                return default(TConfig);
-
-            XmlReader reader = new XmlTextReader(new StringReader(checkConfig));
-
-            var config = new TConfig();
-
-            config.Deserialize(reader);
-
-            return config;
+            return this.OptionElements.GetChildConfig<TConfig>(childConfigName);
         }
     }
 }

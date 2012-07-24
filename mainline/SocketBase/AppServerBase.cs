@@ -1,21 +1,17 @@
 ﻿using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Net;
-using System.Reflection;
 using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
-using System.Text;
 using System.Threading;
-using System.Threading.Tasks;
 using SuperSocket.Common;
-using SuperSocket.Common.Logging;
+using SuperSocket.SocketBase.Logging;
 using SuperSocket.SocketBase.Command;
 using SuperSocket.SocketBase.Config;
 using SuperSocket.SocketBase.Protocol;
 using SuperSocket.SocketBase.Security;
+using SuperSocket.SocketBase.Provider;
 
 namespace SuperSocket.SocketBase
 {
@@ -24,7 +20,7 @@ namespace SuperSocket.SocketBase
     /// </summary>
     /// <typeparam name="TAppSession">The type of the app session.</typeparam>
     /// <typeparam name="TRequestInfo">The type of the request info.</typeparam>
-    public abstract class AppServerBase<TAppSession, TRequestInfo> : IAppServer<TAppSession, TRequestInfo>, ICommandSource<ICommand<TAppSession, TRequestInfo>>, IRawDataProcessor<TAppSession>
+    public abstract partial class AppServerBase<TAppSession, TRequestInfo> : IAppServer<TAppSession, TRequestInfo>, ICommandSource<ICommand<TAppSession, TRequestInfo>>, IRawDataProcessor<TAppSession>, IRequestHandler<TRequestInfo>
         where TRequestInfo : class, IRequestInfo
         where TAppSession : AppSession<TAppSession, TRequestInfo>, IAppSession, new()
     {
@@ -50,6 +46,14 @@ namespace SuperSocket.SocketBase
         /// The request filter factory.
         /// </value>
         public virtual IRequestFilterFactory<TRequestInfo> RequestFilterFactory { get; protected set; }
+
+        /// <summary>
+        /// Gets the request filter factory.
+        /// </summary>
+        object IAppServer.RequestFilterFactory
+        {
+            get { return this.RequestFilterFactory; }
+        }
 
         private List<ICommandLoader> m_CommandLoaders;
 
@@ -114,6 +118,15 @@ namespace SuperSocket.SocketBase
         /// </value>
         public DateTime StartedTime { get; private set; }
 
+
+        /// <summary>
+        /// Gets or sets the log factory.
+        /// </summary>
+        /// <value>
+        /// The log factory.
+        /// </value>
+        public ILogFactory LogFactory { get; private set; }
+
         /// <summary>
         /// Initializes a new instance of the <see cref="AppServerBase&lt;TAppSession, TRequestInfo&gt;"/> class.
         /// </summary>
@@ -141,9 +154,27 @@ namespace SuperSocket.SocketBase
         {
             foreach (var loader in m_CommandLoaders)
             {
-                try
+                loader.Error += new EventHandler<ErrorEventArgs>(CommandLoaderOnError);
+                loader.Updated += new EventHandler<CommandUpdateEventArgs<ICommand>>(CommandLoaderOnCommandsUpdated);
+
+                if (!loader.Initialize<ICommand<TAppSession, TRequestInfo>>(RootConfig, this))
                 {
-                    var ret = loader.LoadCommands<TAppSession, TRequestInfo>(this, c =>
+                    if (Logger.IsErrorEnabled)
+                        Logger.ErrorFormat("Failed initialize the command loader {0}.", loader.ToString());
+                    return false;
+                }
+
+                IEnumerable<ICommand> commands;
+                if (!loader.TryLoadCommands(out commands))
+                {
+                    if (Logger.IsErrorEnabled)
+                        Logger.ErrorFormat("Failed load commands from the command loader {0}.", loader.ToString());
+                    return false;
+                }
+
+                if (commands != null && commands.Any())
+                {
+                    foreach (var c in commands)
                     {
                         if (commandDict.ContainsKey(c.Name))
                         {
@@ -152,98 +183,101 @@ namespace SuperSocket.SocketBase
                             return false;
                         }
 
-                        commandDict.Add(c.Name, c);
-                        return true;
-                    }, u =>
-                    {
-                        var workingDict = m_CommandDict.Values.ToDictionary(c => c.Name, StringComparer.OrdinalIgnoreCase);
-                        var updatedCommands = 0;
+                        var castedCommand = c as ICommand<TAppSession, TRequestInfo>;
 
-                        foreach (var c in u)
+                        if (castedCommand == null)
                         {
-                            if (c == null)
-                                continue;
-
-                            if (c.UpdateAction == CommandUpdateAction.Remove)
-                            {
-                                workingDict.Remove(c.Command.Name);
-                                if (Logger.IsInfoEnabled)
-                                    Logger.InfoFormat("The command '{0}' has been removed from this server!", c.Command.Name);
-                            }
-                            else if (c.UpdateAction == CommandUpdateAction.Add)
-                            {
-                                workingDict.Add(c.Command.Name, c.Command);
-                                if (Logger.IsInfoEnabled)
-                                    Logger.InfoFormat("The command '{0}' has been added into this server!", c.Command.Name);
-                            }
-                            else
-                            {
-                                workingDict[c.Command.Name] = c.Command;
-                                if (Logger.IsInfoEnabled)
-                                    Logger.InfoFormat("The command '{0}' has been updated!", c.Command.Name);
-                            }
-
-                            updatedCommands++;
+                            if (Logger.IsErrorEnabled)
+                                Logger.Error("Invalid command has been found! Command name: " + c.Name);
+                            return false;
                         }
 
-                        if (updatedCommands > 0)
-                        {
-                            Interlocked.Exchange<Dictionary<string, ICommand<TAppSession, TRequestInfo>>>(ref m_CommandDict, workingDict);
-                        }
-                    });
-
-                    if (!ret)
-                        return false;
-                }
-                catch (Exception e)
-                {
-                    if (Logger.IsErrorEnabled)
-                        Logger.Error("Failed to load command by " + loader.GetType().ToString() + "!", e);
-                    return false;
+                        commandDict.Add(c.Name, castedCommand);
+                    }
                 }
             }
 
-            SetupCommandFilters(commandDict.Values);
-
+            m_CommandFilterDict = CommandFilterFactory.GenerateCommandFilterLibrary(this.GetType(), commandDict.Values.Cast<ICommand>());
             return true;
         }
 
-        /// <summary>
-        /// Setups the command filters.
-        /// </summary>
-        /// <param name="commands">The commands.</param>
-        private void SetupCommandFilters(IEnumerable<ICommand<TAppSession, TRequestInfo>> commands)
+        void CommandLoaderOnCommandsUpdated(object sender, CommandUpdateEventArgs<ICommand> e)
         {
-            m_CommandFilterDict = CommandFilterFactory.GenerateCommandFilterLibrary(this.GetType(), commands.Cast<ICommand>());
+            var workingDict = m_CommandDict.Values.ToDictionary(c => c.Name, StringComparer.OrdinalIgnoreCase);
+            var updatedCommands = 0;
+
+            foreach (var c in e.Commands)
+            {
+                if (c == null)
+                    continue;
+
+                var castedCommand = c.Command as ICommand<TAppSession, TRequestInfo>;
+
+                if (castedCommand == null)
+                {
+                    if (Logger.IsErrorEnabled)
+                        Logger.Error("Invalid command has been found! Command name: " + c.Command.Name);
+
+                    continue;
+                }
+
+                if (c.UpdateAction == CommandUpdateAction.Remove)
+                {
+                    workingDict.Remove(castedCommand.Name);
+                    if (Logger.IsInfoEnabled)
+                        Logger.InfoFormat("The command '{0}' has been removed from this server!", c.Command.Name);
+                }
+                else if (c.UpdateAction == CommandUpdateAction.Add)
+                {
+                    workingDict.Add(castedCommand.Name, castedCommand);
+                    if (Logger.IsInfoEnabled)
+                        Logger.InfoFormat("The command '{0}' has been added into this server!", c.Command.Name);
+                }
+                else
+                {
+                    workingDict[c.Command.Name] = castedCommand;
+                    if (Logger.IsInfoEnabled)
+                        Logger.InfoFormat("The command '{0}' has been updated!", c.Command.Name);
+                }
+
+                updatedCommands++;
+            }
+
+            if (updatedCommands > 0)
+            {
+                var commandFilters = CommandFilterFactory.GenerateCommandFilterLibrary(this.GetType(), workingDict.Values.Cast<ICommand>());
+
+                Interlocked.Exchange(ref m_CommandDict, workingDict);
+                Interlocked.Exchange(ref m_CommandFilterDict, commandFilters);
+            }
+        }
+
+        void CommandLoaderOnError(object sender, ErrorEventArgs e)
+        {
+            if (!Logger.IsErrorEnabled)
+                return;
+
+            Logger.Error(e.Exception);
         }
 
         /// <summary>
-        /// Setups the appServer instance
-        /// </summary>
-        /// <param name="rootConfig">The SuperSocket root config.</param>
-        /// <param name="config">The socket server instance config.</param>
-        /// <param name="socketServerFactory">The socket server factory.</param>
-        /// <returns></returns>
-        protected virtual bool Setup(IRootConfig rootConfig, IServerConfig config, ISocketServerFactory socketServerFactory)
-        {
-            return Setup(rootConfig, config, socketServerFactory, null);
-        }
-
-        /// <summary>
-        /// Setups the appServer instance
+        /// Setups the specified root config.
         /// </summary>
         /// <param name="rootConfig">The root config.</param>
-        /// <param name="config">The socket server instance config.</param>
-        /// <param name="socketServerFactory">The socket server factory.</param>
-        /// <param name="requestFilterFactory">The request filter factory.</param>
+        /// <param name="config">The config.</param>
         /// <returns></returns>
-        protected virtual bool Setup(IRootConfig rootConfig, IServerConfig config, ISocketServerFactory socketServerFactory, IRequestFilterFactory<TRequestInfo> requestFilterFactory)
+        protected virtual bool Setup(IRootConfig rootConfig, IServerConfig config)
+        {
+            return true;
+        }
+
+        private void SetupBasic(IRootConfig rootConfig, IServerConfig config, ISocketServerFactory socketServerFactory)
         {
             if (rootConfig == null)
                 throw new ArgumentNullException("rootConfig");
 
             RootConfig = rootConfig;
-            
+
             if (config == null)
                 throw new ArgumentNullException("config");
 
@@ -256,56 +290,62 @@ namespace SuperSocket.SocketBase
                         rootConfig.MinWorkingThreads >= 0 ? rootConfig.MinWorkingThreads : new Nullable<int>(),
                         rootConfig.MinCompletionPortThreads >= 0 ? rootConfig.MinCompletionPortThreads : new Nullable<int>()))
                 {
-                    return false;
+                    throw new Exception("Failed to configure thread pool!");
                 }
 
                 m_ThreadPoolConfigured = true;
             }
 
+            if (socketServerFactory == null)
+                throw new ArgumentNullException("socketServerFactory");
+
             m_SocketServerFactory = socketServerFactory;
+        }
 
-            SetupLogger();
+        private bool SetupMedium(IRequestFilterFactory<TRequestInfo> requestFilterFactory, IEnumerable<IConnectionFilter> connectionFilters, IEnumerable<ICommandLoader> commandLoaders)
+        {
+            if (requestFilterFactory != null)
+                RequestFilterFactory = requestFilterFactory;
 
+            if (connectionFilters != null && connectionFilters.Any())
+            {
+                if (m_ConnectionFilters == null)
+                    m_ConnectionFilters = new List<IConnectionFilter>();
+
+                m_ConnectionFilters.AddRange(connectionFilters);
+            }
+
+            SetupCommandLoader(commandLoaders);
+
+            return true;
+        }
+
+        private bool SetupAdvanced(IServerConfig config)
+        {
             if (!SetupSecurity(config))
                 return false;
 
             if (!SetupListeners(config))
-            {
-                if(Logger.IsErrorEnabled)
-                    Logger.Error("Invalid config ip/port");
-
                 return false;
-            }
-
-            if (!SetupRequestFilterFactory(config, requestFilterFactory))
-                return false;
-
-            m_CommandLoaders = new List<ICommandLoader>
-            {
-                new ReflectCommandLoader()
-            };
-
-            if (Config.EnableDynamicCommand)
-            {
-                ICommandLoader dynamicCommandLoader;
-
-                try
-                {
-                    dynamicCommandLoader = AssemblyUtil.CreateInstance<ICommandLoader>("SuperSocket.Dlr.DynamicCommandLoader, SuperSocket.Dlr");
-                }
-                catch (Exception e)
-                {
-                    if (Logger.IsErrorEnabled)
-                        Logger.Error("The file SuperSocket.Dlr is required for dynamic command support!", e);
-
-                    return false;
-                }
-
-                m_CommandLoaders.Add(dynamicCommandLoader);
-            }
 
             if (!SetupCommands(m_CommandDict))
                 return false;
+
+            return true;
+        }
+
+
+        private bool SetupFinal()
+        {
+            var plainConfig = Config as ServerConfig;
+
+            if (plainConfig == null)
+            {
+                //Using plain config model instead of .NET configuration element to improve performance
+                plainConfig = new ServerConfig();
+                Config.CopyPropertiesTo(plainConfig);
+                Config = plainConfig;
+            }
 
             return SetupSocketServer();
         }
@@ -314,71 +354,101 @@ namespace SuperSocket.SocketBase
         /// Setups the specified root config.
         /// </summary>
         /// <param name="bootstrap">The bootstrap.</param>
-        /// <param name="rootConfig">The SuperSocket root config.</param>
         /// <param name="config">The socket server instance config.</param>
-        /// <param name="socketServerFactory">The socket server factory.</param>
+        /// <param name="factories">The factories.</param>
         /// <returns></returns>
-        bool IAppServer.Setup(IBootstrap bootstrap, IRootConfig rootConfig, IServerConfig config, ISocketServerFactory socketServerFactory)
+        bool IWorkItem.Setup(IBootstrap bootstrap, IServerConfig config, ProviderFactoryInfo[] factories)
         {
             if (bootstrap == null)
                 throw new ArgumentNullException("bootstrap");
 
             Bootstrap = bootstrap;
 
-            return Setup(rootConfig, config, socketServerFactory);
-        }
+            if (factories == null)
+                throw new ArgumentNullException("factories");
 
-        /// <summary>
-        /// Setups the request filter factory.
-        /// </summary>
-        /// <param name="config">The config.</param>
-        /// <param name="requestFilterFactory">The request filter factory.</param>
-        /// <returns></returns>
-        private bool SetupRequestFilterFactory(IServerConfig config, IRequestFilterFactory<TRequestInfo> requestFilterFactory)
-        {
-            //The protocol passed by programming has higher priority, then by config
-            if (requestFilterFactory != null)
+            var rootConfig = bootstrap.Config;
+
+            SetupBasic(rootConfig, config, GetSingleProviderInstance<ISocketServerFactory>(factories, ProviderKey.SocketServerFactory));
+
+            if (!SetupLogFactory(GetSingleProviderInstance<ILogFactory>(factories, ProviderKey.LogFactory)))
+                return false;
+
+            Logger = CreateLogger(this.Name);
+
+            if (!SetupMedium(
+                    GetSingleProviderInstance<IRequestFilterFactory<TRequestInfo>>(factories, ProviderKey.RequestFilterFactory),
+                    GetProviderInstances<IConnectionFilter>(factories, ProviderKey.ConnectionFilter),
+                    GetProviderInstances<ICommandLoader>(factories, ProviderKey.CommandLoader)))
             {
-                this.RequestFilterFactory = requestFilterFactory;
-            }
-            else
-            {
-                //There is a protocol configuration existing
-                if (!string.IsNullOrEmpty(config.Protocol))
-                {
-                    IRequestFilterFactory<TRequestInfo> configuredRequestFilterFactory;
-
-                    try
-                    {
-                        configuredRequestFilterFactory = AssemblyUtil.CreateInstance<IRequestFilterFactory<TRequestInfo>>(config.Protocol);
-                    }
-                    catch(Exception e)
-                    {
-                        if (Logger.IsErrorEnabled)
-                            Logger.Error(string.Format("Invalid configured protocol {0}.", config.Protocol), e);
-
-                        return false;
-                    }
-
-                    this.RequestFilterFactory = configuredRequestFilterFactory;
-                }
-            }
-
-            //If there is no defined protocol, use CommandLineProtocol as default
-            if (RequestFilterFactory == null)
-            {
-                if (Logger.IsErrorEnabled)
-                    Logger.Error("Protocol hasn't been set!");
-
                 return false;
             }
+
+            if (!SetupAdvanced(config))
+                return false;
+
+            if (!Setup(rootConfig, config))
+                return false;
+
+            return SetupFinal();
+        }
+
+
+        private TProvider GetSingleProviderInstance<TProvider>(ProviderFactoryInfo[] factories, ProviderKey key)
+        {
+            var factory = factories.FirstOrDefault(p => p.Key.Name == key.Name);
+
+            if (factory == null)
+                return default(TProvider);
+
+            return factory.ExportFactory.CreateExport<TProvider>();
+        }
+
+        private IEnumerable<TProvider> GetProviderInstances<TProvider>(ProviderFactoryInfo[] factories, ProviderKey key)
+            where TProvider : class
+        {
+            IEnumerable<ProviderFactoryInfo> selectedFactories = factories.Where(p => p.Key.Name == key.Name);
+
+            if (!selectedFactories.Any())
+                return null;
+
+            return selectedFactories.Select(f => f.ExportFactory.CreateExport<TProvider>());
+        }
+
+        private bool SetupLogFactory(ILogFactory logFactory)
+        {
+            if (logFactory != null)
+            {
+                LogFactory = logFactory;
+                return true;
+            }
+
+            //Log4NetLogFactory is default log factory
+            if (LogFactory == null)
+                LogFactory = new Log4NetLogFactory();
 
             return true;
         }
 
-        private void SetupLogger()
+        private bool SetupCommandLoader(IEnumerable<ICommandLoader> commandLoaders)
         {
-            Logger = LogFactoryProvider.LogFactory.GetLog(this.Name);
+            m_CommandLoaders = new List<ICommandLoader>();
+            m_CommandLoaders.Add(new ReflectCommandLoader());
+
+            if (commandLoaders != null && commandLoaders.Any())
+                m_CommandLoaders.AddRange(commandLoaders);
+
+            return true;
+        }
+
+        /// <summary>
+        /// Creates the logger for the AppServer.
+        /// </summary>
+        /// <param name="loggerName">Name of the logger.</param>
+        /// <returns></returns>
+        protected virtual ILog CreateLogger(string loggerName)
+        {
+            return LogFactory.GetLog(loggerName);
         }
 
         /// <summary>
@@ -569,6 +639,8 @@ namespace SuperSocket.SocketBase
                 {
                     if (Logger.IsErrorEnabled)
                         Logger.Error("No listener defined!");
+
+                    return false;
                 }
 
                 m_Listeners = listeners.ToArray();
@@ -815,6 +887,16 @@ namespace SuperSocket.SocketBase
         }
 
         /// <summary>
+        /// Executes the command.
+        /// </summary>
+        /// <param name="session">The session.</param>
+        /// <param name="requestInfo">The request info.</param>
+        void IRequestHandler<TRequestInfo>.ExecuteCommand(IAppSession session, TRequestInfo requestInfo)
+        {
+            this.ExecuteCommand((TAppSession)session, requestInfo);
+        }
+
+        /// <summary>
         /// Gets or sets the server's connection filter
         /// </summary>
         /// <value>
@@ -823,13 +905,6 @@ namespace SuperSocket.SocketBase
         public IEnumerable<IConnectionFilter> ConnectionFilters
         {
             get { return m_ConnectionFilters; }
-            set
-            {
-                if (m_ConnectionFilters == null)
-                    m_ConnectionFilters = new List<IConnectionFilter>();
-
-                m_ConnectionFilters.AddRange(value);
-            }
         }
 
         /// <summary>
@@ -861,18 +936,36 @@ namespace SuperSocket.SocketBase
         /// </summary>
         /// <param name="socketSession">The socket session.</param>
         /// <returns></returns>
-        public virtual IAppSession CreateAppSession(ISocketSession socketSession)
+        IAppSession IAppServer.CreateAppSession(ISocketSession socketSession)
         {
             if (!ExecuteConnectionFilters(socketSession.RemoteEndPoint))
                 return NullAppSession;
 
             var appSession = new TAppSession();
+
+            if (!RegisterSession(socketSession.SessionID, appSession))
+                return NullAppSession;
+
             appSession.Initialize(this, socketSession, RequestFilterFactory.CreateFilter(this, socketSession));
             socketSession.Closed += OnSocketSessionClosed;
+
+            if (Logger.IsInfoEnabled)
+                Logger.InfoFormat("A new session connected!");
 
             OnNewSessionConnected(appSession);
 
             return appSession;
+        }
+
+        /// <summary>
+        /// Registers the session into session container.
+        /// </summary>
+        /// <param name="sessionID">The session ID.</param>
+        /// <param name="appSession">The app session.</param>
+        /// <returns></returns>
+        protected virtual bool RegisterSession(string sessionID, TAppSession appSession)
+        {
+            return true;
         }
 
 
@@ -979,11 +1072,11 @@ namespace SuperSocket.SocketBase
         }
 
         /// <summary>
-        /// Gets the app session by ID internal.
+        /// Gets the app session by ID.
         /// </summary>
         /// <param name="sessionID">The session ID.</param>
         /// <returns></returns>
-        protected abstract IAppSession GetAppSessionByIDInternal(string sessionID);
+        public abstract TAppSession GetAppSessionByID(string sessionID);
 
         /// <summary>
         /// Gets the app session by ID.
@@ -992,7 +1085,7 @@ namespace SuperSocket.SocketBase
         /// <returns></returns>
         IAppSession IAppServer.GetAppSessionByID(string sessionID)
         {
-            return GetAppSessionByIDInternal(sessionID);
+            return this.GetAppSessionByID(sessionID);
         }
 
         /// <summary>

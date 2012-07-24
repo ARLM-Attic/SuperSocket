@@ -5,32 +5,48 @@ using System.Text;
 using System.Reflection;
 using SuperSocket.Common;
 using SuperSocket.SocketBase.Protocol;
+using SuperSocket.SocketBase.Config;
 
 namespace SuperSocket.SocketBase.Command
 {
     /// <summary>
     /// A command loader which loads commands from assembly by reflection
     /// </summary>
-    public class ReflectCommandLoader : ICommandLoader
+    public class ReflectCommandLoader : CommandLoaderBase
     {
-        #region ICommandLoader Members
+        private Type m_CommandType;
+
+        private IAppServer m_AppServer;
 
         /// <summary>
-        /// Loads the commands for specific server.
+        /// Initializes the command loader
         /// </summary>
-        /// <typeparam name="TAppSession">The type of the app session.</typeparam>
-        /// <typeparam name="TRequestInfo">The type of the request info.</typeparam>
+        /// <typeparam name="TCommand">The type of the command.</typeparam>
+        /// <param name="rootConfig">The root config.</param>
         /// <param name="appServer">The app server.</param>
-        /// <param name="commandRegister">The command register.</param>
-        /// <param name="commandUpdater">The command updater.</param>
         /// <returns></returns>
-        public bool LoadCommands<TAppSession, TRequestInfo>(IAppServer appServer, Func<ICommand<TAppSession, TRequestInfo>, bool> commandRegister, Action<IEnumerable<CommandUpdateInfo<ICommand<TAppSession, TRequestInfo>>>> commandUpdater)
-            where TAppSession : IAppSession, IAppSession<TAppSession, TRequestInfo>, new()
-            where TRequestInfo : IRequestInfo
+        public override bool Initialize<TCommand>(IRootConfig rootConfig, IAppServer appServer)
         {
-            var commandAssemblies = new List<Assembly> { appServer.GetType().Assembly };
+            m_CommandType = typeof(TCommand);
+            m_AppServer = appServer;
+            return true;
+        }
 
-            string commandAssembly = appServer.Config.Options.GetValue("commandAssembly");
+        /// <summary>
+        /// Tries to load commands.
+        /// </summary>
+        /// <param name="commands">The commands.</param>
+        /// <returns></returns>
+        public override bool TryLoadCommands(out IEnumerable<ICommand> commands)
+        {
+            commands = null;
+
+            var commandAssemblies = new List<Assembly>();
+
+            if (m_AppServer.GetType().Assembly != this.GetType().Assembly)
+                commandAssemblies.Add(m_AppServer.GetType().Assembly);
+
+            string commandAssembly = m_AppServer.Config.Options.GetValue("commandAssembly");
 
             if (!string.IsNullOrEmpty(commandAssembly))
             {
@@ -43,22 +59,35 @@ namespace SuperSocket.SocketBase.Command
                 }
                 catch (Exception e)
                 {
-                    throw new Exception("Failed to load defined command assemblies!", e);
+                    OnError(new Exception("Failed to load defined command assemblies!", e));
+                    return false;
                 }
             }
+
+            if (!commandAssemblies.Any())
+            {
+                OnError("You should configure the commandAssembly value!");
+                return false;
+            }
+
+            var outputCommands = new List<ICommand>();
 
             foreach (var assembly in commandAssemblies)
             {
-                foreach (var c in assembly.GetImplementedObjectsByInterface<ICommand<TAppSession, TRequestInfo>>())
+                try
                 {
-                    if (!commandRegister(c))
-                        return false;
+                    outputCommands.AddRange(assembly.GetImplementedObjectsByInterface<ICommand>(m_CommandType));
+                }
+                catch (Exception exc)
+                {
+                    OnError(new Exception(string.Format("Failed to get commands from the assembly {0}!", assembly.FullName), exc));
+                    return false;
                 }
             }
 
+            commands = outputCommands;
+
             return true;
         }
-
-        #endregion
     }
 }
