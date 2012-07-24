@@ -1,5 +1,10 @@
 SuperSocket
 
+----
+$ git svn init https://SuperSocket.svn.codeplex.com/svn
+$ git svn fetch -r 78459:HEAD
+----
+
 SuperSocket is a light weight extensible socket application framework.
 You can use it to build a command based server side socket application easily without thinking about how to use socket,
 how to maintain the socket connections and how socket works(synchronize/asynchronize).
