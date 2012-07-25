@@ -5,24 +5,15 @@ using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using SuperSocket.Common;
-using SuperSocket.Common.Logging;
+using SuperSocket.SocketBase.Logging;
 using SuperSocket.SocketBase.Command;
 using SuperSocket.SocketBase.Config;
 using SuperSocket.SocketBase.Protocol;
+using System.Collections;
+using SuperSocket.SocketBase.Provider;
 
 namespace SuperSocket.SocketBase
 {
-    /// <summary>
-    /// The interface for who provides logger
-    /// </summary>
-    public interface ILoggerProvider
-    {
-        /// <summary>
-        /// Gets the logger assosiated with this object.
-        /// </summary>
-        ILog Logger { get; }
-    }
-
     /// <summary>
     /// The interface for who will react with performance collecting
     /// </summary>
@@ -37,32 +28,24 @@ namespace SuperSocket.SocketBase
     }
 
     /// <summary>
-    /// The interface for AppServer
+    /// An item can be started and stopped
     /// </summary>
-    public interface IAppServer : ILoggerProvider
+    public interface IWorkItem
     {
         /// <summary>
-        /// Gets the name of the server instance.
+        /// Gets the name.
         /// </summary>
         string Name { get; }
-        
-        /// <summary>
-        /// Gets or sets the server's connection filter
-        /// </summary>
-        /// <value>
-        /// The server's connection filters
-        /// </value>
-        IEnumerable<IConnectionFilter> ConnectionFilters{ get; set; }
 
         /// <summary>
-        /// Setups the specified root config.
+        /// Setups with the specified root config.
         /// </summary>
         /// <param name="bootstrap">The bootstrap.</param>
-        /// <param name="rootConfig">The SuperSocket root config.</param>
         /// <param name="config">The socket server instance config.</param>
-        /// <param name="socketServerFactory">The socket server factory.</param>
+        /// <param name="factories">The factories.</param>
         /// <returns></returns>
-        bool Setup(IBootstrap bootstrap, IRootConfig rootConfig, IServerConfig config, ISocketServerFactory socketServerFactory);
+        bool Setup(IBootstrap bootstrap, IServerConfig config, ProviderFactoryInfo[] factories);
+
 
         /// <summary>
         /// Starts this server instance.
@@ -70,6 +53,31 @@ namespace SuperSocket.SocketBase
         /// <returns>return true if start successfull, else false</returns>
         bool Start();
 
+
+        /// <summary>
+        /// Gets a value indicating whether this instance is running.
+        /// </summary>
+        /// <value>
+        /// 	<c>true</c> if this instance is running; otherwise, <c>false</c>.
+        /// </value>
+        bool IsRunning { get; }
+
+        /// <summary>
+        /// Stops this server instance.
+        /// </summary>
+        void Stop();
+
+        /// <summary>
+        /// Gets the total session count.
+        /// </summary>
+        int SessionCount { get; }
+    }
+
+    /// <summary>
+    /// The interface for AppServer
+    /// </summary>
+    public interface IAppServer : IWorkItem, ILoggerProvider
+    {
         /// <summary>
         /// Gets the started time.
         /// </summary>
@@ -88,9 +96,10 @@ namespace SuperSocket.SocketBase
         ListenerInfo[] Listeners { get; }
 
         /// <summary>
-        /// Stops this server instance.
+        /// Gets the request filter factory.
         /// </summary>
-        void Stop();
+        object RequestFilterFactory { get; }
+        
 
         /// <summary>
         /// Gets the server's config.
@@ -106,19 +115,6 @@ namespace SuperSocket.SocketBase
         /// Gets the transfer layer security protocol.
         /// </summary>
         SslProtocols BasicSecurity { get; }
-
-        /// <summary>
-        /// Gets the total session count.
-        /// </summary>
-        int SessionCount { get; }
-
-        /// <summary>
-        /// Gets a value indicating whether this instance is running.
-        /// </summary>
-        /// <value>
-        /// 	<c>true</c> if this instance is running; otherwise, <c>false</c>.
-        /// </value>
-        bool IsRunning { get; }
 
         /// <summary>
         /// Creates the app session.
@@ -140,6 +136,11 @@ namespace SuperSocket.SocketBase
         /// <param name="session">The session.</param>
         /// <param name="security">The security protocol.</param>
         void ResetSessionSecurity(IAppSession session, SslProtocols security);
+
+        /// <summary>
+        /// Gets the log factory.
+        /// </summary>
+        ILogFactory LogFactory { get; }
     }
 
     /// <summary>
@@ -204,5 +205,20 @@ namespace SuperSocket.SocketBase
         /// Occurs when [request comming].
         /// </summary>
         event RequestHandler<TAppSession, TRequestInfo> RequestHandler;
+    }
+
+    /// <summary>
+    /// The interface for handler of session request
+    /// </summary>
+    /// <typeparam name="TRequestInfo">The type of the request info.</typeparam>
+    public interface IRequestHandler<TRequestInfo>
+        where TRequestInfo : IRequestInfo
+    {
+        /// <summary>
+        /// Executes the command.
+        /// </summary>
+        /// <param name="session">The session.</param>
+        /// <param name="requestInfo">The request info.</param>
+        void ExecuteCommand(IAppSession session, TRequestInfo requestInfo);
     }
 }

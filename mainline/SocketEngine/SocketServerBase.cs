@@ -12,6 +12,7 @@ using System.Threading;
 using SuperSocket.Common;
 using SuperSocket.SocketBase;
 using SuperSocket.SocketBase.Command;
+using SuperSocket.SocketBase.Logging;
 using SuperSocket.SocketBase.Protocol;
 
 namespace SuperSocket.SocketEngine
@@ -43,12 +44,97 @@ namespace SuperSocket.SocketEngine
         public virtual bool Start()
         {
             IsStopped = false;
+
+            ILog log = AppServer.Logger;
+
+            for (var i = 0; i < ListenerInfos.Length; i++)
+            {
+                var listener = CreateListener(ListenerInfos[i]);
+                listener.Error += new ErrorHandler(OnListenerError);
+                listener.Stopped += new EventHandler(OnListenerStopped);
+                listener.NewClientAccepted += new NewClientAcceptHandler(OnNewClientAccepted);
+
+                if (listener.Start(AppServer.Config))
+                {
+                    Listeners.Add(listener);
+
+                    if (log.IsDebugEnabled)
+                    {
+                        log.DebugFormat("Listener ({0}) was started", listener.EndPoint);
+                    }
+                }
+                else //If one listener failed to start, stop started listeners
+                {
+                    if (log.IsDebugEnabled)
+                    {
+                        log.DebugFormat("Listener ({0}) failed to start", listener.EndPoint);
+                    }
+
+                    for (var j = 0; j < Listeners.Count; j++)
+                    {
+                        Listeners[j].Stop();
+                    }
+
+                    Listeners.Clear();
+                    return false;
+                }
+            }
+
+            IsRunning = true;
             return true;
         }
+
+        protected abstract void OnNewClientAccepted(ISocketListener listener, Socket client, object state);
+
+        void OnListenerError(ISocketListener listener, Exception e)
+        {
+            listener.Stop();
+
+            var logger = this.AppServer.Logger;
+
+            if(!logger.IsErrorEnabled)
+                return;
+
+            if (e is ObjectDisposedException || e is NullReferenceException)
+                return;
+
+            var socketException = e as SocketException;
+
+            if (socketException != null)
+            {
+                if (socketException.ErrorCode == 995 || socketException.ErrorCode == 10004 || socketException.ErrorCode == 10038)
+                    return;
+            }
+
+            logger.ErrorFormat(string.Format("Listener ({0}) error: {1}", listener.EndPoint, e.Message), e);
+        }
+
+        void OnListenerStopped(object sender, EventArgs e)
+        {
+            var listener = sender as ISocketListener;
+
+            ILog log = AppServer.Logger;
+
+            if (log.IsDebugEnabled)
+                log.DebugFormat("Listener ({0}) was stoppped", listener.EndPoint);
+        }
+
+        protected abstract ISocketListener CreateListener(ListenerInfo listenerInfo);
 
         public virtual void Stop()
         {
             IsStopped = true;
+
+            for (var i = 0; i < Listeners.Count; i++)
+            {
+                var listener = Listeners[i];
+
+                listener.Stop();
+            }
+
+            Listeners.Clear();
+
+            IsRunning = false;
         }
 
         #region IDisposable Members

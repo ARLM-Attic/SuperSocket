@@ -63,15 +63,15 @@ namespace SuperSocket.Common
         }
 
         /// <summary>
-        /// Gets the implemented objects by interface from assembly.
+        /// Gets the implemented objects by interface.
         /// </summary>
         /// <typeparam name="TBaseInterface">The type of the base interface.</typeparam>
         /// <param name="assembly">The assembly.</param>
+        /// <param name="targetType">Type of the target.</param>
         /// <returns></returns>
-        public static IEnumerable<TBaseInterface> GetImplementedObjectsByInterface<TBaseInterface>(this Assembly assembly)
+        public static IEnumerable<TBaseInterface> GetImplementedObjectsByInterface<TBaseInterface>(this Assembly assembly, Type targetType)
             where TBaseInterface : class
         {
-            Type interfaceType = typeof(TBaseInterface);
             Type[] arrType = assembly.GetExportedTypes();
 
             var result = new List<TBaseInterface>();
@@ -83,12 +83,10 @@ namespace SuperSocket.Common
                 if (currentImplementType.IsAbstract)
                     continue;
 
-                var foundInterface = currentImplementType.GetInterfaces().SingleOrDefault(x => x == interfaceType);
+                if (!targetType.IsAssignableFrom(currentImplementType))
+                    continue;
 
-                if (foundInterface != null)
-                {
-                    result.Add(currentImplementType.GetConstructor(new Type[0]).Invoke(new object[0]) as TBaseInterface);
-                }
+                result.Add((TBaseInterface)Activator.CreateInstance(currentImplementType));
             }
 
             return result;
@@ -121,7 +119,7 @@ namespace SuperSocket.Common
         /// </summary>
         /// <param name="source">The source.</param>
         /// <param name="target">The target.</param>
-        public static void CopyPropertiesTo(this object source, object target)
+        public static T CopyPropertiesTo<T>(this T source, T target)
         {
             PropertyInfo[] properties = source.GetType().GetProperties(BindingFlags.Instance | BindingFlags.Public | BindingFlags.GetProperty);
             Dictionary<string, PropertyInfo> sourcePropertiesDict = properties.ToDictionary(p => p.Name);
@@ -131,14 +129,20 @@ namespace SuperSocket.Common
             {
                 var p = targetProperties[i];
                 PropertyInfo sourceProperty;
+
                 if (sourcePropertiesDict.TryGetValue(p.Name, out sourceProperty))
                 {
                     if (sourceProperty.PropertyType != p.PropertyType)
                         continue;
-                }
 
-                p.SetValue(target, sourceProperty.GetValue(source, m_EmptyObjectArray), m_EmptyObjectArray);
+                    if (!sourceProperty.PropertyType.IsSerializable)
+                        continue;
+
+                    p.SetValue(target, sourceProperty.GetValue(source, m_EmptyObjectArray), m_EmptyObjectArray);
+                }
             }
+
+            return target;
         }
 
         /// <summary>

@@ -5,14 +5,36 @@ using System.Configuration;
 using System.Linq;
 using System.Security.Authentication;
 using System.Text;
+using SuperSocket.Common;
 
 namespace SuperSocket.SocketBase.Config
 {
     /// <summary>
     /// Server configruation model
     /// </summary>
+    [Serializable]
     public class ServerConfig : IServerConfig
     {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="ServerConfig"/> class.
+        /// </summary>
+        /// <param name="serverConfig">The server config.</param>
+        public ServerConfig(IServerConfig serverConfig)
+        {
+            serverConfig.CopyPropertiesTo(this);
+            
+            this.Options = serverConfig.Options;
+            this.OptionElements = serverConfig.OptionElements;
+
+            if (serverConfig.Certificate != null)
+                this.Certificate = serverConfig.Certificate.CopyPropertiesTo(new CertificateConfig());
+
+            if (serverConfig.Listeners != null && serverConfig.Listeners.Any())
+            {
+                this.Listeners = serverConfig.Listeners.Select(l => l.CopyPropertiesTo(new ListenerConfig()));
+            }
+        }
+
         /// <summary>
         /// Initializes a new instance of the <see cref="ServerConfig"/> class.
         /// </summary>
@@ -38,9 +60,9 @@ namespace SuperSocket.SocketBase.Config
         public string ServiceName { get; set; }
 
         /// <summary>
-        /// Gets/sets the protocol.
+        /// Gets/sets the RequestFilter.
         /// </summary>
-        public string Protocol { get; set; }
+        public string RequestFilter { get; set; }
 
         /// <summary>
         /// Gets/sets the ip.
@@ -56,6 +78,11 @@ namespace SuperSocket.SocketBase.Config
         /// Gets/sets the options.
         /// </summary>
         public NameValueCollection Options { get; set; }
+
+        /// <summary>
+        /// Gets the option elements.
+        /// </summary>
+        public NameValueCollection OptionElements { get; set; }
 
         /// <summary>
         /// Gets/sets a value indicating whether this <see cref="IServerConfig"/> is disabled.
@@ -180,9 +207,14 @@ namespace SuperSocket.SocketBase.Config
         /// Gets/sets the connection filters used by this server instance.
         /// </summary>
         /// <value>
-        /// The connection filters's name list, seperated by comma
+        /// The connection filter's name list, seperated by comma
         /// </value>
-        public string ConnectionFilters { get; set; }
+        public string ConnectionFilter { get; set; }
+
+        /// <summary>
+        /// Gets the command loader, multiple values should be separated by comma.
+        /// </summary>
+        public string CommandLoader { get; set; }
 
         /// <summary>
         /// Gets/sets the start keep alive time, in seconds
@@ -193,14 +225,6 @@ namespace SuperSocket.SocketBase.Config
         /// Gets/sets the keep alive interval, in seconds.
         /// </summary>
         public int KeepAliveInterval { get; set; }
-
-        /// <summary>
-        /// Gets/sets a value indicating whether [enable dynamic command](support commands written in IronPython).
-        /// </summary>
-        /// <value>
-        /// 	<c>true</c> if [dynamic command is enabled]; otherwise, <c>false</c>.
-        /// </value>
-        public bool EnableDynamicCommand { get; set; }
 
         /// <summary>
         /// Gets the backlog size of socket listening.
@@ -221,13 +245,18 @@ namespace SuperSocket.SocketBase.Config
         public virtual TConfig GetChildConfig<TConfig>(string childConfigName)
             where TConfig : ConfigurationElement, new()
         {
-            return default(TConfig);
+            return this.OptionElements.GetChildConfig<TConfig>(childConfigName);
         }
 
         /// <summary>
         /// Gets and sets the listeners' configuration.
         /// </summary>
         public IEnumerable<IListenerConfig> Listeners { get; set; }
+
+        /// <summary>
+        /// Gets/sets the log factory name.
+        /// </summary>
+        public string LogFactory { get; set; }
 
         #endregion
     }

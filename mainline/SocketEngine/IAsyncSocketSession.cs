@@ -1,17 +1,19 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using SuperSocket.Common.Logging;
-using SuperSocket.SocketEngine.AsyncSocket;
 using System.Net.Sockets;
+using System.Text;
+using SuperSocket.Common;
+using SuperSocket.SocketBase;
+using SuperSocket.SocketBase.Logging;
+using SuperSocket.SocketEngine.AsyncSocket;
 
 namespace SuperSocket.SocketEngine
 {
-    interface IAsyncSocketSessionBase
+    interface IAsyncSocketSessionBase : ILoggerProvider
     {
         SocketAsyncEventArgsProxy SocketAsyncProxy { get; }
-        ILog Logger { get; }
+        
         Socket Client { get; }
     }
 

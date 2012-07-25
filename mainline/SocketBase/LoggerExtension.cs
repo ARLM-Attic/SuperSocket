@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using SuperSocket.Common;
-using SuperSocket.Common.Logging;
+using SuperSocket.SocketBase.Logging;
 
 namespace SuperSocket.SocketBase
 {
@@ -91,7 +91,7 @@ namespace SuperSocket.SocketBase
                 {
                     if (m_PerfLog == null)
                     {
-                        m_PerfLog = LogFactoryProvider.LogFactory.GetLog(m_PerfLogName);
+                        m_PerfLog = appServer.LogFactory.GetLog(m_PerfLogName);
                     }
                 }
             }

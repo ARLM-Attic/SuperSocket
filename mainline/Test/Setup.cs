@@ -3,7 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using NUnit.Framework;
-using SuperSocket.Common.Logging;
+using SuperSocket.SocketBase.Logging;
+using System.Threading;
 
 namespace SuperSocket.Test
 {
@@ -13,8 +14,7 @@ namespace SuperSocket.Test
         [SetUp]
         public void RunBeforeAllTest()
         {
-            if (LogFactoryProvider.LogFactory == null)
-                LogFactoryProvider.Initialize(new ConsoleLogFactory());
+
         }
     }
 }

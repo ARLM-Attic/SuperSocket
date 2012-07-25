@@ -21,9 +21,9 @@ namespace SuperSocket.SocketBase.Config
         string ServiceName { get; }
 
         /// <summary>
-        /// Gets the protocol.
+        /// Gets the request filter.
         /// </summary>
-        string Protocol { get; }
+        string RequestFilter { get; }
 
         /// <summary>
         /// Gets the ip.
@@ -39,6 +39,12 @@ namespace SuperSocket.SocketBase.Config
         /// Gets the options.
         /// </summary>
         NameValueCollection Options { get; }
+
+
+        /// <summary>
+        /// Gets the option elements.
+        /// </summary>
+        NameValueCollection OptionElements { get; }
 
         /// <summary>
         /// Gets a value indicating whether this <see cref="IServerConfig"/> is disabled.
@@ -156,10 +162,14 @@ namespace SuperSocket.SocketBase.Config
         /// Gets the connection filters used by this server instance.
         /// </summary>
         /// <value>
-        /// The connection filters's name list, seperated by comma
+        /// The connection filter's name list, seperated by comma
         /// </value>
-        string ConnectionFilters { get; }
+        string ConnectionFilter { get; }
 
+        /// <summary>
+        /// Gets the command loader, multiple values should be separated by comma.
+        /// </summary>
+        string CommandLoader { get; }
 
         /// <summary>
         /// Gets the start keep alive time, in seconds
@@ -172,14 +182,6 @@ namespace SuperSocket.SocketBase.Config
         /// </summary>
         int KeepAliveInterval { get; }
 
-
-        /// <summary>
-        /// Gets a value indicating whether [enable dynamic command](support commands written in IronPython).
-        /// </summary>
-        /// <value>
-        /// 	<c>true</c> if [dynamic command is enabled]; otherwise, <c>false</c>.
-        /// </value>
-        bool EnableDynamicCommand { get; }
 
         /// <summary>
         /// Gets the backlog size of socket listening.
@@ -207,5 +209,10 @@ namespace SuperSocket.SocketBase.Config
         /// Gets the listeners' configuration.
         /// </summary>
         IEnumerable<IListenerConfig> Listeners { get; }
+
+        /// <summary>
+        /// Gets the log factory name.
+        /// </summary>
+        string LogFactory { get; }
     }
 }

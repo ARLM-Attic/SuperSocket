@@ -11,7 +11,7 @@ namespace SuperSocket.SocketEngine
 {
     delegate void ErrorHandler(ISocketListener listener, Exception e);
 
-    delegate void NewClientAcceptHandler(ISocketListener listener, Socket client);
+    delegate void NewClientAcceptHandler(ISocketListener listener, Socket client, object state);
 
     /// <summary>
     /// The interface for socket listener
@@ -31,8 +31,9 @@ namespace SuperSocket.SocketEngine
         /// <summary>
         /// Starts to listen
         /// </summary>
+        /// <param name="config">The server config.</param>
         /// <returns></returns>
-        bool Start();
+        bool Start(IServerConfig config);
 
         /// <summary>
         /// Stops listening
@@ -48,5 +49,11 @@ namespace SuperSocket.SocketEngine
         /// Occurs when error got.
         /// </summary>
         event ErrorHandler Error;
+
+
+        /// <summary>
+        /// Occurs when [stopped].
+        /// </summary>
+        event EventHandler Stopped;
     }
 }

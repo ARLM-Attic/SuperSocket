@@ -58,6 +58,10 @@
     <AssemblyOriginatorKeyFile>..\supersocket.snk</AssemblyOriginatorKeyFile>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="log4net">
+      <HintPath>..\Reference\log4net.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="System" />
     <Reference Include="System.configuration" />
     <Reference Include="System.Core" />
@@ -70,11 +74,32 @@
     </Compile>
     <Compile Include="AppServer.cs" />
     <Compile Include="AppServerBase.cs" />
+    <Compile Include="AppServerBase.Net40.cs" />
     <Compile Include="AppSession.cs" />
+    <Compile Include="Async.cs" />
     <Compile Include="CommandFilterAttribute.cs" />
+    <Compile Include="Command\CommandLoaderBase.cs" />
+    <Compile Include="Command\CommandUpdateEventArgs.cs" />
+    <Compile Include="Config\IConfigurationSource.cs" />
+    <Compile Include="Config\ITypeProvider.cs" />
+    <Compile Include="Config\ConfigurationSource.cs" />
+    <Compile Include="Config\TypeProviderConfig.cs" />
     <Compile Include="IBootstrap.cs" />
+    <Compile Include="ILoggerProvider.cs" />
+    <Compile Include="IsolationMode.cs" />
+    <Compile Include="Logging\ConsoleLog.cs" />
+    <Compile Include="Logging\ConsoleLogFactory.cs" />
+    <Compile Include="Logging\ILog.cs" />
+    <Compile Include="Logging\ILogFactory.cs" />
+    <Compile Include="Logging\Log4NetLog.cs" />
+    <Compile Include="Logging\Log4NetLogFactory.cs" />
+    <Compile Include="Logging\LogFactoryBase.cs" />
     <Compile Include="Protocol\FixedSizeRequestFilter.cs" />
+    <Compile Include="Protocol\FixHeaderRequestFilter.cs" />
     <Compile Include="Protocol\IOffsetAdapter.cs" />
+    <Compile Include="Provider\ExportFactory.cs" />
+    <Compile Include="Provider\ProviderFactoryInfo.cs" />
+    <Compile Include="Provider\ProviderKey.cs" />
     <Compile Include="RequestHandler.cs" />
     <Compile Include="Config\IListenerConfig.cs" />
     <Compile Include="Config\ListenerConfig.cs" />
@@ -100,11 +125,8 @@
     <Compile Include="CommanFilterFactory.cs" />
     <Compile Include="Config\CertificateConfig.cs" />
     <Compile Include="Config\ICertificateConfig.cs" />
-    <Compile Include="Config\IConfig.cs" />
-    <Compile Include="Config\IConnectionFilterConfig.cs" />
     <Compile Include="Config\IRootConfig.cs" />
     <Compile Include="Config\IServerConfig.cs" />
-    <Compile Include="Config\IServiceConfig.cs" />
     <Compile Include="Config\RootConfig.cs" />
     <Compile Include="Config\ServerConfig.cs" />
     <Compile Include="Protocol\IRequestFilter.cs" />
@@ -121,7 +143,6 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Protocol\BasicRequestInfoParser.cs" />
     <Compile Include="Protocol\IRequestInfoParser.cs" />
-    <Compile Include="Security\Certificate.cs" />
     <Compile Include="Security\CertificateManager.cs" />
     <Compile Include="SocketMode.cs" />
   </ItemGroup>

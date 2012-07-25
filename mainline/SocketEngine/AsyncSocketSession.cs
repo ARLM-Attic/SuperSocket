@@ -7,9 +7,9 @@ using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 using SuperSocket.Common;
-using SuperSocket.Common.Logging;
 using SuperSocket.SocketBase;
 using SuperSocket.SocketBase.Command;
+using SuperSocket.SocketBase.Logging;
 using SuperSocket.SocketBase.Protocol;
 using SuperSocket.SocketEngine.AsyncSocket;
 
@@ -34,7 +34,7 @@ namespace SuperSocket.SocketEngine
             m_IsReset = isReset;
         }
 
-        ILog IAsyncSocketSessionBase.Logger
+        ILog ILoggerProvider.Logger
         {
             get { return AppSession.Logger; }
         }

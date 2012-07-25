@@ -8,6 +8,7 @@ namespace SuperSocket.Common
     /// <summary>
     /// ConfigurationElementBase
     /// </summary>
+    [Serializable]
     public class ConfigurationElementBase : ConfigurationElement
     {
         private bool m_NameRequired;
@@ -82,7 +83,7 @@ namespace SuperSocket.Common
         /// <summary>
         /// Gets the option elements.
         /// </summary>
-        protected NameValueCollection OptionElements { get; private set; }
+        public NameValueCollection OptionElements { get; private set; }
 
         /// <summary>
         /// Gets a value indicating whether an unknown element is encountered during deserialization.
@@ -98,10 +99,7 @@ namespace SuperSocket.Common
             if (OptionElements == null)
                 OptionElements = new NameValueCollection();
 
-            //Because ConfigurationElement.DeserializeElemenet() method only accept outerXml and in MS.NET, it accept innerXml,
-            //so there is a hack over here
-            OptionElements.Add(elementName, Platform.IsMono ? reader.ReadOuterXml() : reader.ReadInnerXml());
-
+            OptionElements.Add(elementName, reader.ReadOuterXml());
             return true;
         }
     }

@@ -23,7 +23,7 @@
     <DebugType>full</DebugType>
     <Optimize>false</Optimize>
     <OutputPath>bin\Debug\</OutputPath>
-    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <DefineConstants>TRACE;DEBUG;IL20</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
@@ -31,11 +31,23 @@
     <DebugType>pdbonly</DebugType>
     <Optimize>true</Optimize>
     <OutputPath>bin\Release\</OutputPath>
-    <DefineConstants>TRACE</DefineConstants>
+    <DefineConstants>TRACE;IL20</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="IronPython, Version=2.6.10920.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\Reference\IronPython\Net20\IronPython.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Dynamic, Version=1.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\Reference\DLR\Net20\Microsoft.Dynamic.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Scripting, Version=1.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\Reference\DLR\Net20\Microsoft.Scripting.dll</HintPath>
+    </Reference>
     <Reference Include="nunit.framework, Version=2.5.5.10112, Culture=neutral, PublicKeyToken=96d09a1eb7f44a77, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\Reference\nunit.framework.dll</HintPath>
@@ -59,27 +71,47 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="AsyncSecureSocketServerTest.cs" />
+    <Compile Include="AppDomainSocketServerTest.cs" />
+    <Compile Include="BootstrapTest.cs" />
+    <Compile Include="Command\ADDCS.cs" />
+    <Compile Include="Command\DOMAIN.cs" />
     <Compile Include="Command\ECHO.cs" />
+    <Compile Include="Command\MULTCS.cs" />
     <Compile Include="Command\NUM.cs" />
     <Compile Include="Command\PARA.cs" />
-    <Compile Include="Command\RECEL.cs" />
-    <Compile Include="Command\RECEM.cs" />
     <Compile Include="Common\ArraySegmentTest.cs" />
+    <Compile Include="Common\AssemblyUtilTest.cs" />
     <Compile Include="Common\BinaryUtilTest.cs" />
     <Compile Include="Common\PerformanceTest.cs" />
+    <Compile Include="ConnectionFilterTest.cs" />
+    <Compile Include="ConnectionFilter\TestConnectionFilter.cs" />
+    <Compile Include="DLRSocketServerTest.cs" />
+    <Compile Include="ITestSetup.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="SecureTcpSocketServerTest.cs" />
     <Compile Include="Setup.cs" />
     <Compile Include="SocketServerTest.cs" />
     <Compile Include="TcpSocketServerTest.cs" />
-    <Compile Include="TestCommandParser.cs" />
+    <Compile Include="TestRequestParser.cs" />
     <Compile Include="TestServer.cs" />
     <Compile Include="TestSession.cs" />
+    <Compile Include="UdpSocketServerTest.cs" />
+    <Compile Include="Udp\MyRequestFilter.cs" />
+    <Compile Include="Udp\MyUdpProtocol.cs" />
+    <Compile Include="Udp\SESS.cs" />
+    <Compile Include="Udp\UdpAppServer.cs" />
+    <Compile Include="Udp\UdpTestSession.cs" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Resources\TestFile.txt" />
   </ItemGroup>
   <ItemGroup>
+    <Content Include="Command\ADD.py">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Command\MULT.py">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
     <Content Include="supersocket.pfx">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
@@ -89,6 +121,10 @@
       <Project>{A24F4D38-BA9C-4FD6-95B7-4980DE36131A}</Project>
       <Name>SuperSocket.Common.Net35</Name>
     </ProjectReference>
+    <ProjectReference Include="..\Dlr\SuperSocket.Dlr.Net35.csproj">
+      <Project>{55BAA051-CE62-4D4A-81B6-68B042CC78E9}</Project>
+      <Name>SuperSocket.Dlr.Net35</Name>
+    </ProjectReference>
     <ProjectReference Include="..\SocketBase\SuperSocket.SocketBase.Net35.csproj">
       <Project>{40B77789-EA11-4C05-8F52-86711D7BCAAF}</Project>
       <Name>SuperSocket.SocketBase.Net35</Name>
@@ -97,6 +133,20 @@
       <Project>{153FEF72-191C-43D9-BE71-2B351C7AC760}</Project>
       <Name>SuperSocket.SocketEngine.Net35</Name>
     </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="Config\AppDomain.config">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Config\Basic.config">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Config\DLR.config">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Config\Listeners.config">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
