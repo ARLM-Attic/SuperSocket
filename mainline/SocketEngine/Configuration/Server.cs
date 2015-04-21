@@ -31,12 +31,12 @@ namespace SuperSocket.SocketEngine.Configuration
         }
 
         /// <summary>
-        /// Gets the protocol.
+        /// Gets the request filter factory.
         /// </summary>
-        [ConfigurationProperty("requestFilter", IsRequired = false)]
-        public string RequestFilter
+        [ConfigurationProperty("requestFilterFactory", IsRequired = false)]
+        public string RequestFilterFactory
         {
-            get { return this["requestFilter"] as string; }
+            get { return this["requestFilterFactory"] as string; }
         }
 
         /// <summary>
@@ -317,6 +317,21 @@ namespace SuperSocket.SocketEngine.Configuration
             get
             {
                 return (int)this["startupOrder"];
+            }
+        }
+
+        /// <summary>
+        /// Gets/sets the size of the sending queue.
+        /// </summary>
+        /// <value>
+        /// The size of the sending queue.
+        /// </value>
+        [ConfigurationProperty("sendingQueueSize", IsRequired = false, DefaultValue = 16)]
+        public int SendingQueueSize
+        {
+            get
+            {
+                return (int)this["sendingQueueSize"];
             }
         }
 

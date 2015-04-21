@@ -21,9 +21,9 @@ namespace SuperSocket.SocketBase.Config
         string ServiceName { get; }
 
         /// <summary>
-        /// Gets the request filter.
+        /// Gets the request filter factory.
         /// </summary>
-        string RequestFilter { get; }
+        string RequestFilterFactory { get; }
 
         /// <summary>
         /// Gets the ip.
@@ -214,5 +214,14 @@ namespace SuperSocket.SocketBase.Config
         /// Gets the log factory name.
         /// </summary>
         string LogFactory { get; }
+
+
+        /// <summary>
+        /// Gets the size of the sending queue.
+        /// </summary>
+        /// <value>
+        /// The size of the sending queue.
+        /// </value>
+        int SendingQueueSize { get; }
     }
 }

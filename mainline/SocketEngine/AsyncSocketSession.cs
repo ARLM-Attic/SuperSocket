@@ -143,12 +143,21 @@ namespace SuperSocket.SocketEngine
             }
         }
 
-        protected override void SendSync(byte[] data, int offset, int length)
+        protected override void SendSync(IPosList<ArraySegment<byte>> items)
         {
             try
             {
-                Client.Send(data, offset, length, SocketFlags.None);
-                OnSendingCompleted();
+                for (var i = 0; i < items.Count; i++)
+                {
+                    var item = items[i];
+
+                    var client = Client;
+
+                    if (client == null)
+                        return;
+
+                    client.Send(item.Array, item.Offset, item.Count, SocketFlags.None);
+                }
             }
             catch (Exception e)
             {
@@ -156,17 +165,40 @@ namespace SuperSocket.SocketEngine
                     AppSession.Logger.Error(AppSession, e);
 
                 Close(CloseReason.SocketError);
+                return;
             }
+
+            OnSendingCompleted();
         }
 
-        protected override void SendAsync(byte[] data, int offset, int length)
+        protected override void SendAsync(IPosList<ArraySegment<byte>> items)
         {
             try
             {
-                m_SocketEventArgSend.SetBuffer(data, offset, length);
+                if (items.Count > 1)
+                {
+                    if (m_SocketEventArgSend.Buffer != null)
+                        m_SocketEventArgSend.SetBuffer(null, 0, 0);
 
-                if (!Client.SendAsync(m_SocketEventArgSend))
-                    OnSendingCompleted(Client, m_SocketEventArgSend);
+                    m_SocketEventArgSend.BufferList = items;
+                }
+                else
+                {
+                    var currentItem = items[0];
+
+                    if (m_SocketEventArgSend.BufferList != null)
+                        m_SocketEventArgSend.BufferList = null;
+
+                    m_SocketEventArgSend.SetBuffer(currentItem.Array, 0, currentItem.Count);
+                }
+
+                var client = Client;
+
+                if (client == null)
+                    return;
+
+                if (!client.SendAsync(m_SocketEventArgSend))
+                    OnSendingCompleted(client, m_SocketEventArgSend);
             }
             catch (Exception e)
             {

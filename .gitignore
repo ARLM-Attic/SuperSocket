@@ -1,2 +1,14 @@
-bin/
 *.userprefs
+mainline/Common/bin
+mainline/Dlr/bin
+mainline/Facility/bin
+mainline/SocketBase/bin
+mainline/SocketEngine/bin
+mainline/SocketService/bin
+mainline/Test/bin
+v1.4/Common/bin
+v1.4/Facility/bin
+v1.4/SocketBase/bin
+v1.4/SocketEngine/bin
+v1.4/Test/bin
+v1.4/SocketService/bin

@@ -60,9 +60,9 @@ namespace SuperSocket.SocketBase.Config
         public string ServiceName { get; set; }
 
         /// <summary>
-        /// Gets/sets the RequestFilter.
+        /// Gets/sets the request filter factory.
         /// </summary>
-        public string RequestFilter { get; set; }
+        public string RequestFilterFactory { get; set; }
 
         /// <summary>
         /// Gets/sets the ip.
@@ -257,6 +257,14 @@ namespace SuperSocket.SocketBase.Config
         /// Gets/sets the log factory name.
         /// </summary>
         public string LogFactory { get; set; }
+
+        /// <summary>
+        /// Gets/sets the size of the sending queue.
+        /// </summary>
+        /// <value>
+        /// The size of the sending queue.
+        /// </value>
+        public int SendingQueueSize { get; set; }
 
         #endregion
     }

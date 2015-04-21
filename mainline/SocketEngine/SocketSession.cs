@@ -24,7 +24,7 @@ namespace SuperSocket.SocketEngine
 
         protected readonly object SyncRoot = new object();
 
-        private bool m_InSending = false;
+        private int m_InSending = 0;
 
         protected bool SyncSend { get; private set; }
 
@@ -34,7 +34,7 @@ namespace SuperSocket.SocketEngine
             if (client == null)
                 throw new ArgumentNullException("client");
 
-            Client = client;
+            m_Client = client;
             LocalEndPoint = (IPEndPoint)client.LocalEndPoint;
             RemoteEndPoint = (IPEndPoint)client.RemoteEndPoint;
         }
@@ -85,8 +85,7 @@ namespace SuperSocket.SocketEngine
         {
             m_IsClosed = true;
 
-            if (m_InSending)
-                m_InSending = false;
+            Interlocked.CompareExchange(ref m_InSending, 0, 1);
 
             var closedHandler = Closed;
             if (closedHandler != null)
@@ -100,56 +99,63 @@ namespace SuperSocket.SocketEngine
         /// </summary>
         public Action<ISocketSession, CloseReason> Closed { get; set; }
 
+        IPosList<ArraySegment<byte>> m_SendingItems;
+
+        private IPosList<ArraySegment<byte>> GetSendingItems()
+        {
+            if (m_SendingItems == null)
+            {
+                m_SendingItems = new PosList<ArraySegment<byte>>();
+            }
+
+            return m_SendingItems;
+        }
+
         /// <summary>
         /// Starts the sending.
         /// </summary>
         public void StartSend()
         {
-            if(m_InSending)
+            if (Interlocked.CompareExchange(ref m_InSending, 1, 0) == 1)
                 return;
 
-            lock (SyncRoot)
-            {
-                if (m_InSending)
-                    return;
+            var sendingItems = GetSendingItems();
 
-                ArraySegment<byte> data;
+            if (!AppSession.TryGetSendingData(sendingItems))
+                Interlocked.Decrement(ref m_InSending);
 
-                if (AppSession.TryGetSendingData(out data))
-                {
-                    m_InSending = true;
-                    SendResponse(data.Array, data.Offset, data.Count);
-                }
-            }
+            SendResponse(sendingItems);
         }
 
-        protected abstract void SendAsync(byte[] data, int offset, int length);
+        protected abstract void SendAsync(IPosList<ArraySegment<byte>> items);
 
-        protected abstract void SendSync(byte[] data, int offset, int length);
+        protected abstract void SendSync(IPosList<ArraySegment<byte>> items);
 
-        private void SendResponse(byte[] data, int offset, int length)
+        private void SendResponse(IPosList<ArraySegment<byte>> items)
         {
             if (SyncSend)
             {
-                SendSync(data, offset, length);
+                SendSync(items);
             }
             else
             {
-                SendAsync(data, offset, length);
+                SendAsync(items);
             }
         }
 
-        protected void OnSendingCompleted()
+        protected virtual void OnSendingCompleted()
         {
-            ArraySegment<byte> data;
+            var sendingItems = GetSendingItems();
+            sendingItems.Clear();
+            sendingItems.Position = 0;
 
-            if (AppSession.TryGetSendingData(out data))
+            if (AppSession.TryGetSendingData(sendingItems))
             {
-                SendResponse(data.Array, data.Offset, data.Count);
+                SendResponse(sendingItems);
             }
             else
             {
-                m_InSending = false;
+                Interlocked.Decrement(ref m_InSending);
             }
         }
 
@@ -160,11 +166,16 @@ namespace SuperSocket.SocketEngine
             return new NetworkStream(Client);
         }
 
+
+        private Socket m_Client;
         /// <summary>
         /// Gets or sets the client.
         /// </summary>
         /// <value>The client.</value>
-        public Socket Client { get; set; }
+        public Socket Client
+        {
+            get { return m_Client; }
+        }
 
         private bool m_IsClosed = false;
 
@@ -193,16 +204,14 @@ namespace SuperSocket.SocketEngine
 
         public virtual void Close(CloseReason reason)
         {
-            if (Client == null && m_IsClosed)
+            var client = m_Client;
+
+            if(client == null)
                 return;
 
-            lock (SyncRoot)
+            if (Interlocked.CompareExchange(ref m_Client, null, client) == client)
             {
-                if (Client == null && m_IsClosed)
-                    return;
-
-                Client.SafeClose();
-                Client = null;
+                client.SafeClose();
                 OnClose(reason);
             }
         }
